@@ -202,9 +202,15 @@ class VAR(nn.Module):
             # cond_tokens = cond_BD.unsqueeze(1).expand(B, self.first_l, -1)
             sos = sos.unsqueeze(1).expand(B, self.first_l, -1) + self.pos_start.expand(B, self.first_l, -1)
             if scale_idx == 0: x_BLC = sos
-            else: x_BLC = self.word_embed(x_BLCv.float())
+            else: 
+                x_BLC = torch.cat((sos, self.word_embed(x_BLCv.float())), dim=1)
+                x_BLC = x_BLC[:, bg:ed]
+            # print(f"x_BLC.shape: {x_BLC.shape}")
+            # print(f"self.lvl_embed(self.lvl_1L[:, bg:ed].expand(B, -1)){self.lvl_embed(self.lvl_1L[:, bg:ed].expand(B, -1)).shape}")
+            # print(f"self.pos_1LC[:, bg:ed]{self.pos_1LC[:, bg:ed].shape}")
             x_BLC += self.lvl_embed(self.lvl_1L[:, bg:ed].expand(B, -1)) + self.pos_1LC[:, bg:ed]
         
+        # print(f"[DEBUG] scale={scale_idx}, bg={bg}, ed={ed}, ed-bg={ed-bg}, total={self.pos_1LC.shape[1]}")
         attn_bias = None
         cond_BD_or_gss = self.shared_ada_lin(cond_BD)
 

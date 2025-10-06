@@ -131,17 +131,18 @@ class VARTrainer(object):
 
         gt_idx_Bl: List[ITen] = self.vae_local.img_to_idxBl(inp_B3HW)
         bg, ed = self.begin_ends[scale_idx]
+        # print(f"scale_idx: {scale_idx}")
         gt_BL = torch.cat(gt_idx_Bl, dim=1)
         gt_BL_per_scale = gt_BL[:, bg:ed]
 
         x_BLCv_wo_first_l: Ten = self.quantize_local.idxBl_to_var_input(gt_idx_Bl)
-        x_BLCv_per_scale = x_BLCv_wo_first_l[:, bg:ed]
 
         with self.var_opt.amp_ctx:
             self.var_wo_ddp.forward
-            logits_BLV_per_scale = self.var(label_B, x_BLCv_per_scale)
-            loss = self.train_loss(logits_BLV_per_scale.view(-1, V), gt_BL_per_scale.view(-1)).view(B, -1)
-            lw = self.loss_weight
+            logits_BLV_per_scale = self.var(label_B, x_BLCv_wo_first_l, scale_idx)
+            # print(f"[DEBUG scale={scale_idx}] input shape={x_BLCv_wo_first_l.shape}")
+            loss = self.train_loss(logits_BLV_per_scale.contiguous().view(-1, V), gt_BL_per_scale.contiguous().view(-1)).view(B, -1)
+            lw = self.loss_weight[:, bg:ed]
             loss = loss.mul(lw).sum(dim=-1).mean()
         
         grad_norm, scale_log2 = self.var_opt.backward_clip_step(loss=loss, stepping=stepping)
@@ -149,14 +150,14 @@ class VARTrainer(object):
         # log
         pred_BL_per_scale = logits_BLV_per_scale.data.argmax(dim=-1)
         if it == 0 or it in metric_lg.log_iters:
-            Lmean = self.val_loss(logits_BLV_per_scale.data.view(-1, V), gt_BL_per_scale.view(-1)).item()
+            Lmean = self.val_loss(logits_BLV_per_scale.data.contiguous().view(-1, V), gt_BL_per_scale.contiguous().view(-1)).item()
             acc_mean = (pred_BL_per_scale == gt_BL_per_scale).float().mean().item() * 100
             # if prog_si >= 0:    # in progressive training
             Ltail = acc_tail = -1
             # else:               # not in progressive training
             #     Ltail = self.val_loss(logits_BLV.data[:, -self.last_l:].reshape(-1, V), gt_BL[:, -self.last_l:].reshape(-1)).item()
             #     acc_tail = (pred_BL[:, -self.last_l:] == gt_BL[:, -self.last_l:]).float().mean().item() * 100
-            grad_norm = grad_norm.item()
+            # grad_norm = grad_norm.item()
             metric_lg.update(Lm=Lmean, Lt=Ltail, Accm=acc_mean, Acct=acc_tail, tnm=grad_norm)
         
         # log to tensorboard

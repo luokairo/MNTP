@@ -181,7 +181,7 @@ class CrossAttention(nn.Module):
 
         return self.proj_drop(self.proj(oup))
 
-class AdaLNPerScale(nn.module):
+class AdaLNPerScale(nn.Module):
     def __init__(self, hidden_dim: int, cond_dim: int, num_scales: int = 10):
         super().__init__()
         self.ln = nn.LayerNorm(hidden_dim, elementwise_affine=False)  # 不带参数的LN
@@ -278,6 +278,8 @@ class AdaLNSelfAttnC2I(nn.Module):
         # 两个 AdaLN per-scale 层
         self.adaln1 = AdaLNPerScale(embed_dim, cond_dim, num_scales)
         self.adaln2 = AdaLNPerScale(embed_dim, cond_dim, num_scales)
+
+        self.fused_add_norm_fn = None
 
     def forward(self, x, cond_BD, attn_bias, scale_idx: int):
         # Self-Attention

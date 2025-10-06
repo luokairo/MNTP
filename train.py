@@ -81,9 +81,11 @@ def build_everything(args: arg_util.Args):
             collate_fn=make_collate_with_scale(sampler)
         )
         
+        last_ratio = list(scale2ratio.values())[-1]
+        val_batch_size = round(args.batch_size * last_ratio)
         ld_val = DataLoader(
             dataset_val, num_workers=0, pin_memory=True,
-            batch_size=round(args.batch_size*1.5), sampler=EvalDistributedSampler(dataset_val, num_replicas=dist.get_world_size(), rank=dist.get_rank()),
+            batch_size=round(val_batch_size), sampler=EvalDistributedSampler(dataset_val, num_replicas=dist.get_world_size(), rank=dist.get_rank()),
             shuffle=False, drop_last=False,
         )
         del dataset_val
@@ -127,7 +129,7 @@ def build_everything(args: arg_util.Args):
         init_adaln=args.aln, init_adaln_gamma=args.alng, init_head=args.hd, init_std=args.ini,
     )
     
-    vae_ckpt = 'vae_ch160v4096z32.pth'
+    vae_ckpt = '/fs/scratch/PAS2473/MM2025/neurpis2025/ckpt/var/vae_ch160v4096z32.pth'
     if dist.is_local_master():
         if not os.path.exists(vae_ckpt):
             os.system(f'wget https://huggingface.co/FoundationVision/var/resolve/main/{vae_ckpt}')
@@ -136,7 +138,7 @@ def build_everything(args: arg_util.Args):
     
     vae_local: VQVAE = args.compile_model(vae_local, args.vfast)
     var_wo_ddp: VAR = args.compile_model(var_wo_ddp, args.tfast)
-    var: DDP = (DDP if dist.initialized() else NullDDP)(var_wo_ddp, device_ids=[dist.get_local_rank()], find_unused_parameters=False, broadcast_buffers=False)
+    var: DDP = (DDP if dist.initialized() else NullDDP)(var_wo_ddp, device_ids=[dist.get_local_rank()], find_unused_parameters=True, broadcast_buffers=False)
     
     print(f'[INIT] VAR model = {var_wo_ddp}\n\n')
     count_p = lambda m: f'{sum(p.numel() for p in m.parameters())/1e6:.2f}'
@@ -306,7 +308,7 @@ def train_one_ep(ep: int, is_first_ep: bool, start_it: int, args: arg_util.Args,
         warnings.filterwarnings('ignore', category=UserWarning)
     g_it, max_it = ep * iters_train, args.ep * iters_train
     
-    for it, (inp, label, scale_idx) in me.log_every(start_it, iters_train, ld_or_itrt, 30 if iters_train > 8000 else 5, header):
+    for it, (inp, label, scale_idx) in me.log_every(start_it, iters_train, ld_or_itrt, 2000, header):
         g_it = ep * iters_train + it
         if it < start_it: continue
         if is_first_ep and it == start_it: warnings.resetwarnings()

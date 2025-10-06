@@ -23,7 +23,7 @@ import dist
 
 
 class Args(Tap):
-    data_path: str = '/path/to/imagenet'
+    data_path: str = '/fs/scratch/PAS2473/MM2025/neurpis2025/dataset/ILSVRC/Data/CLS-LOC'
     exp_name: str = 'text'
     
     # VAE
